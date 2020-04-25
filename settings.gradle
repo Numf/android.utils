@@ -1,0 +1,3 @@
+rootProject.name='UtilsApp'
+include ':app'
+include ':utils'
