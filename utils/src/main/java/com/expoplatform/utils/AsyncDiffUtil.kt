@@ -7,12 +7,13 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.actor
 import kotlinx.coroutines.channels.consumeEach
+import java.lang.ref.WeakReference
 import java.util.*
 
 class AsyncDiffUtil<T>(
-        private val itemCallback: DiffUtil.ItemCallback<T>,
-        private val listUpdateCallback: ListUpdateCallback,
-        job: Job = Job()
+    private val itemCallback: DiffUtil.ItemCallback<T>,
+    private val listUpdateCallback: ListUpdateCallback,
+    job: Job = Job()
 ) {
 
     internal sealed class UpdateListOperation {
@@ -23,35 +24,45 @@ class AsyncDiffUtil<T>(
         object UpdatePayload : UpdateListOperation()
     }
 
-    internal class SimpleUpdateCallback(private val adapter: RecyclerView.Adapter<out RecyclerView.ViewHolder>) :
-            ListUpdateCallback {
+    internal class SimpleUpdateCallback(adapter: RecyclerView.Adapter<out RecyclerView.ViewHolder>) :
+        ListUpdateCallback {
+
+        private val weakAdapter: WeakReference<RecyclerView.Adapter<out RecyclerView.ViewHolder>> =
+            WeakReference(adapter)
+
+        private val adapter: RecyclerView.Adapter<out RecyclerView.ViewHolder>?
+            get() = weakAdapter.get()
+
         override fun onChanged(position: Int, count: Int, payload: Any?) {
-            adapter.notifyItemRangeChanged(position, count, payload)
+            adapter?.notifyItemRangeChanged(position, count, payload)
         }
 
         override fun onMoved(fromPosition: Int, toPosition: Int) {
-            adapter.notifyItemMoved(fromPosition, toPosition)
+            adapter?.notifyItemMoved(fromPosition, toPosition)
         }
 
         override fun onInserted(position: Int, count: Int) {
-            adapter.notifyItemRangeInserted(position, count)
+            adapter?.notifyItemRangeInserted(position, count)
         }
 
         override fun onRemoved(position: Int, count: Int) {
-            adapter.notifyItemRangeRemoved(position, count)
+            adapter?.notifyItemRangeRemoved(position, count)
         }
     }
 
     constructor(
-            adapter: RecyclerView.Adapter<out RecyclerView.ViewHolder>,
-            itemCallback: DiffUtil.ItemCallback<T>,
-            job: Job = Job()
+        adapter: RecyclerView.Adapter<out RecyclerView.ViewHolder>,
+        itemCallback: DiffUtil.ItemCallback<T>,
+        job: Job = Job()
     ) : this(
-            itemCallback, SimpleUpdateCallback(adapter), job
+        itemCallback, SimpleUpdateCallback(adapter), job
     )
 
     @Suppress("UNCHECKED_CAST")
-    private val updateActor = GlobalScope.actor<UpdateListOperation>(Dispatchers.Main + job, capacity = Channel.CONFLATED) {
+    private val updateActor = GlobalScope.actor<UpdateListOperation>(
+        Dispatchers.Main + job,
+        capacity = Channel.CONFLATED
+    ) {
         consumeEach {
             if (!isActive) return@actor
 
@@ -68,14 +79,14 @@ class AsyncDiffUtil<T>(
                         insert(it.newList)
                     } else if (oldList != it.newList) {
                         val callback =
-                                diffUtilCallback(oldList, it.newList as List<T>, itemCallback)
+                            diffUtilCallback(oldList, it.newList as List<T>, itemCallback)
                         update(it.newList, callback)
                     }
                 }
                 is UpdateListOperation.UpdatePayload -> {
                     if (oldList != null) {
                         val callback =
-                                diffUtilCallback(oldList, oldList, itemCallback)
+                            diffUtilCallback(oldList, oldList, itemCallback)
                         update(oldList, callback)
                     }
                 }
@@ -134,32 +145,36 @@ class AsyncDiffUtil<T>(
         }
     }
 
-    private fun diffUtilCallback(oldList: List<T>, newList: List<T>, callback: DiffUtil.ItemCallback<T>) =
-            object : DiffUtil.Callback() {
-                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                    val oldItem = oldList[oldItemPosition]
-                    val newItem = newList[newItemPosition]
-                    return if (oldItem != null && newItem != null) {
-                        callback.areItemsTheSame(oldItem, newItem)
-                    } else {
-                        oldItem == null && newItem == null
-                    }
-                }
-
-                override fun getOldListSize(): Int = oldList.size
-
-                override fun getNewListSize(): Int = newList.size
-
-                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                    val oldItem = oldList[oldItemPosition]
-                    val newItem = newList[newItemPosition]
-                    return if (oldItem != null && newItem != null) {
-                        callback.areContentsTheSame(oldItem, newItem)
-                    } else if (oldItem == null && newItem == null) {
-                        return true
-                    } else {
-                        throw AssertionError()
-                    }
+    private fun diffUtilCallback(
+        oldList: List<T>,
+        newList: List<T>,
+        callback: DiffUtil.ItemCallback<T>
+    ) =
+        object : DiffUtil.Callback() {
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                val oldItem = oldList[oldItemPosition]
+                val newItem = newList[newItemPosition]
+                return if (oldItem != null && newItem != null) {
+                    callback.areItemsTheSame(oldItem, newItem)
+                } else {
+                    oldItem == null && newItem == null
                 }
             }
+
+            override fun getOldListSize(): Int = oldList.size
+
+            override fun getNewListSize(): Int = newList.size
+
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                val oldItem = oldList[oldItemPosition]
+                val newItem = newList[newItemPosition]
+                return if (oldItem != null && newItem != null) {
+                    callback.areContentsTheSame(oldItem, newItem)
+                } else if (oldItem == null && newItem == null) {
+                    return true
+                } else {
+                    throw AssertionError()
+                }
+            }
+        }
 }
