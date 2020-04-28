@@ -10,7 +10,7 @@ import kotlinx.coroutines.channels.consumeEach
 import java.lang.ref.WeakReference
 import java.util.*
 
-class AsyncDiffUtil<T>(
+open class AsyncDiffUtil<T>(
     private val itemCallback: DiffUtil.ItemCallback<T>,
     private val listUpdateCallback: ListUpdateCallback,
     job: Job = Job()
