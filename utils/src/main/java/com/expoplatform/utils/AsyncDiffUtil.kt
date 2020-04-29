@@ -176,5 +176,11 @@ open class AsyncDiffUtil<T>(
                     throw AssertionError()
                 }
             }
+
+            override fun getChangePayload(oldItemPosition: Int, newItemPosition: Int): Any? {
+                val oldItem = oldList[oldItemPosition]
+                val newItem = newList[newItemPosition]
+                return callback.getChangePayload(oldItem, newItem)
+            }
         }
 }
