@@ -52,11 +52,15 @@ open class AsyncDiffUtil<T>(
 
     constructor(
         adapter: RecyclerView.Adapter<out RecyclerView.ViewHolder>,
+        items: List<T>?,
         itemCallback: DiffUtil.ItemCallback<T>,
         job: Job = Job()
-    ) : this(
-        itemCallback, SimpleUpdateCallback(adapter), job
-    )
+    ) : this(itemCallback, SimpleUpdateCallback(adapter), job) {
+        items?.also { newList ->
+            list = newList
+            readOnlyList = Collections.unmodifiableList(newList)
+        }
+    }
 
     @Suppress("UNCHECKED_CAST")
     private val updateActor = GlobalScope.actor<UpdateListOperation>(
